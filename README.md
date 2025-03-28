@@ -1,6 +1,6 @@
 # Vectora Transaction Service Test
 
-Este proyecto es un servicio de cuentas desarrollado en Java con Spring Boot. Se puede ejecutar en un entorno local o dentro de un contenedor Docker.
+Este proyecto es un servicio de transacciones desarrollado en Java con Spring Boot. Se puede ejecutar en un entorno local o dentro de un contenedor Docker.
 
 ## 📋 Requisitos
 
