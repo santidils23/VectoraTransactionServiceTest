@@ -1,0 +1,58 @@
+spring:
+  # Configuración de base de datos para pruebas
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Configuración Flyway
+  flyway:
+    enabled: true
+
+  # Kafka configurado por la anotación @EmbeddedKafka
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+      group-id: transaction-service-test-group
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    topic:
+      transaction-events: transaction-events
+      transaction-results: transaction-results
+
+  # Configuración de seguridad para tests
+  security:
+    enabled: false
+
+# Configuración del servicio
+service:
+  account:
+    url: http://localhost:8081
+
+# Configuración JWT para pruebas
+jwt:
+  secret: TuClaveSecretaLargaParaFirmarTokensDebeSerMuySegura123456789
+  expiration: 86400  # En segundos (24 horas)
+  token-prefix: "Bearer "
+  header: "Authorization"
+
+# Configuración para validación del monto mínimo
+transaction:
+  minimum-amount: 1000.00
+
+# Configuración de logging para pruebas
+logging:
+  level:
+    com.bankdemo: DEBUG
+    org.springframework.kafka: WARN
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE

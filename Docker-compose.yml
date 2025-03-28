@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # Inicializador de tópicos Kafka
+  kafka-topics-init:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: kafka-topics-init
+    depends_on:
+      - transaction-mysql
+    command: >
+      bash -c "
+        echo 'Esperando que Kafka esté disponible...'
+        cub kafka-ready -b kafka:9092 1 30 &&
+        echo 'Creando tópicos Kafka...' &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --replication-factor 1 --partitions 3 --topic transaction-events &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --replication-factor 1 --partitions 3 --topic transaction-results &&
+        echo 'Tópicos creados correctamente:' &&
+        kafka-topics --list --bootstrap-server kafka:9092
+      "
+    networks:
+      - bank-network
+
+  # Base de datos MySQL para el servicio de transacciones
+  transaction-mysql:
+    image: mysql:8.0
+    container_name: transaction-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: transactiondb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    volumes:
+      - transaction-mysql-data:/var/lib/mysql
+    ports:
+      - "3308:3306"  # Puerto distinto al 3307 para evitar conflicto con accountdb
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bank-network
+
+  # Transaction Service
+  transaction-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: transaction-service
+    restart: always
+    depends_on:
+      transaction-mysql:
+        condition: service_healthy
+      kafka-topics-init:
+        condition: service_completed_successfully
+    environment:
+      # Configuración de base de datos
+      SPRING_DATASOURCE_URL: jdbc:mysql://transaction-mysql:3306/transactiondb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: rootpassword
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.MySQL8Dialect
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+      # Configuración de Kafka - Usa los mismos brokers que account-service
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_KAFKA_CONSUMER_GROUP_ID: transaction-service-group
+      SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET: earliest
+      SPRING_KAFKA_TOPIC_TRANSACTION_EVENTS: transaction-events
+
+      # Configuración general
+      SPRING_MAIN_ALLOW-CIRCULAR-REFERENCES: "true"
+      SERVICE_ACCOUNT_URL: http://account-service:8081
+
+      # Configuración de seguridad
+      JWT_SECRET: TuClaveSecretaLargaParaFirmarTokensDebeSerMuySegura123456789
+      JWT_EXPIRATION: 86400
+      JWT_TOKEN_PREFIX: "Bearer "
+      JWT_HEADER: "Authorization"
+
+      # Credenciales de administrador
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: password
+
+      # Puerto del servidor
+      SERVER_PORT: 8082
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - bank-network
+
+networks:
+  bank-network:
+    external: true  # Usa la red existente creada por el docker-compose de account-service
+    name: vectoraaccountservicetest_bank-network
+
+volumes:
+  transaction-mysql-data:
